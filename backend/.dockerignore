@@ -1,0 +1,25 @@
+# Never include secrets or local-only files in the Docker image
+.env
+*.env
+
+# Runtime data files — managed at runtime via DATA_DIR volume
+last_scan.json
+devices.json
+settings.json
+nohup.out
+*.log
+
+# Python artifacts
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Load test artifacts
+results/
+locustfile.py
+
+# macOS
+.DS_Store

@@ -1,0 +1,78 @@
+workflows:
+  ios-testflight:
+    name: StockPulse – TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      xcode: latest
+      groups:
+        - app_store_credentials
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+
+    scripts:
+      - name: Set up keychain
+        script: keychain initialize
+
+      - name: Write Secrets.xcconfig
+        script: |
+          # CLIENT_API_KEY is a secure variable in the Codemagic group above.
+          # Secrets.xcconfig is gitignored, so CI must create it before building.
+          if [ -z "$CLIENT_API_KEY" ]; then
+            echo "CLIENT_API_KEY is not set in Codemagic — refusing to build an app with an empty key"
+            exit 1
+          fi
+          echo "CLIENT_API_KEY = $CLIENT_API_KEY" > "$CM_BUILD_DIR/Secrets.xcconfig"
+
+      - name: Install Distribution certificate
+        script: |
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > /tmp/certificate.p12
+          keychain add-certificates \
+            --certificate /tmp/certificate.p12 \
+            --certificate-password "$CERTIFICATE_PRIVATE_KEY_PASSWORD"
+
+      - name: Install provisioning profile
+        script: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROVISIONING_PROFILE" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/StockPulse.mobileprovision
+
+      - name: Set Xcode to use manual signing
+        script: xcode-project use-profiles
+
+      - name: Increment build number
+        script: |
+          # Use Codemagic's ever-increasing build number to avoid duplicate upload errors
+          agvtool new-version -all $BUILD_NUMBER
+
+      - name: Build .ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/StockPulse.xcodeproj" \
+            --scheme "StockPulse" \
+            --config "Release"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
+      email:
+        recipients:
+          - stockpulse.app.help@gmail.com
+        notify:
+          success: true
+          failure: true
+# trigger test: confirming GitHub webhook fires a build

@@ -1,0 +1,4 @@
+# Persistent storage — Volume must be created in Railway dashboard mounted at /data
+# and DATA_DIR=/data added to Railway environment variables.
+[[volumes]]
+mountPath = "/data"

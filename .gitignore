@@ -1,0 +1,40 @@
+# ── Python / Backend ──────────────────────────────────────────────────────────
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/.env            # ← NEVER commit secrets
+backend/last_scan.json   # runtime cache
+backend/devices.json     # runtime data
+backend/.slow_cache.json # slow-source cache (Google Trends, SEC EDGAR)
+backend/settings.json   # runtime data
+backend/watchlists.json # device tokens — never commit
+backend/nohup.out
+*.log
+
+# ── Xcode / iOS ───────────────────────────────────────────────────────────────
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.build/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# ── Load test artifacts ───────────────────────────────────────────────────────
+backend/results/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.swp
+*.swo
+.idea/
+Secrets.xcconfig

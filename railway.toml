@@ -1,0 +1,18 @@
+# railway.toml
+# StockPulse backend deployment configuration for Railway.
+# Docs: https://docs.railway.app/reference/config-as-code
+
+[build]
+# Build from the Dockerfile inside the backend/ subdirectory
+builder       = "DOCKERFILE"
+dockerfilePath = "backend/Dockerfile"
+# Only rebuild when backend files change (saves build minutes)
+watchPatterns = ["backend/**"]
+
+[deploy]
+# Use the enhanced /health endpoint for readiness checks
+healthcheckPath    = "/health"
+healthcheckTimeout = 120        # seconds — allows time for first scan on startup
+numReplicas        = 1          # single replica keeps APScheduler running once
+restartPolicyType  = "ON_FAILURE"
+restartPolicyMaxRetries = 3

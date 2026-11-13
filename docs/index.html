@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockPulse AI — Reddit Stock Sentiment, Powered by AI</title>
+  <meta name="description" content="StockPulse aggregates Reddit, StockTwits, Google Trends, news, SEC filings, and live price data into a single AI-powered investment score. Get alerted the moment your watchlist tickers trend." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #00d084;
+      --green-dim: #00a368;
+      --bg: #0d0f14;
+      --surface: #151820;
+      --surface2: #1c2030;
+      --border: #252b3b;
+      --text: #e8ecf4;
+      --muted: #7a8299;
+      --white: #ffffff;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: var(--green); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 40px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(13, 15, 20, 0.92);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+    .nav-brand {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--white);
+      letter-spacing: -0.3px;
+    }
+    .nav-brand span { color: var(--green); }
+    .nav-links { display: flex; gap: 28px; align-items: center; }
+    .nav-links a { color: var(--muted); font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center;
+      padding: 100px 24px 80px;
+      max-width: 780px;
+      margin: 0 auto;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(0, 208, 132, 0.12);
+      color: var(--green);
+      border: 1px solid rgba(0, 208, 132, 0.3);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      padding: 5px 14px;
+      margin-bottom: 28px;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 60px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1.5px;
+      color: var(--white);
+      margin-bottom: 22px;
+    }
+    .hero h1 em { color: var(--green); font-style: normal; }
+    .hero p {
+      font-size: 18px;
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+    .cta-group { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+    .btn-primary:hover { background: var(--green-dim); text-decoration: none; color: #000; }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface2);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    .btn-secondary:hover { background: var(--border); text-decoration: none; }
+
+    /* ── Score card mockup ── */
+    .mockup-wrap {
+      max-width: 680px;
+      margin: 70px auto 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .mockup-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .mockup-header .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+    .mockup-header .timestamp { font-size: 11px; color: var(--muted); }
+    .ticker-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .ticker-row:last-child { border-bottom: none; }
+    .ticker-left { display: flex; align-items: center; gap: 14px; }
+    .ticker-sym { font-weight: 700; font-size: 15px; color: var(--white); min-width: 50px; }
+    .ticker-reason { font-size: 12px; color: var(--muted); max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ticker-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+    .score-pill {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+    .score-bull { background: rgba(0,208,132,0.15); color: var(--green); }
+    .score-bear { background: rgba(255,80,80,0.12); color: #ff6b6b; }
+    .price-chg { font-size: 13px; font-weight: 600; }
+    .chg-pos { color: var(--green); }
+    .chg-neg { color: #ff6b6b; }
+
+    /* ── Section wrapper ── */
+    section { padding: 90px 24px; }
+    .section-inner { max-width: 1040px; margin: 0 auto; }
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--green);
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      color: var(--white);
+      margin-bottom: 16px;
+      line-height: 1.15;
+    }
+    .section-sub {
+      font-size: 16px;
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 56px;
+    }
+
+    /* ── Sources grid ── */
+    .sources-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .source-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color 0.15s;
+    }
+    .source-card:hover { border-color: rgba(0,208,132,0.3); }
+    .source-icon { font-size: 28px; margin-bottom: 14px; }
+    .source-name { font-size: 15px; font-weight: 700; color: var(--white); margin-bottom: 6px; }
+    .source-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    /* ── Features ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+    }
+    .feature-icon { font-size: 22px; margin-bottom: 12px; }
+    .feature-title { font-size: 14px; font-weight: 700; color: var(--white); margin-bottom: 6px; }
+    .feature-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid var(--border); }
+
+    /* ── CTA section ── */
+    .cta-section {
+      text-align: center;
+      padding: 100px 24px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .cta-section h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 800; color: var(--white); letter-spacing: -0.8px; margin-bottom: 16px; }
+    .cta-section p { font-size: 16px; color: var(--muted); margin-bottom: 36px; }
+
+    /* ── Footer ── */
+    footer {
+      padding: 32px 40px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-brand { font-size: 14px; font-weight: 700; color: var(--white); }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a { font-size: 13px; color: var(--muted); }
+    .footer-links a:hover { color: var(--text); text-decoration: none; }
+    .footer-copy { font-size: 12px; color: var(--muted); width: 100%; margin-top: 8px; }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+      line-height: 1.7;
+    }
+
+    @media (max-width: 600px) {
+      nav { padding: 16px 20px; }
+      .nav-links { gap: 16px; }
+      footer { flex-direction: column; align-items: flex-start; padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-brand">Stock<span>Pulse</span> AI</div>
+    <div class="nav-links">
+      <a href="#sources">Data Sources</a>
+      <a href="#features">Features</a>
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="badge">Now on the App Store</div>
+    <h1>6 sources.<br /><em>One AI score.</em><br />Every 15 minutes.</h1>
+    <p>StockPulse scans Reddit, StockTwits, Google Trends, financial news, SEC filings, and live price data — then runs it all through AI to rank the stocks with real momentum.</p>
+    <div class="cta-group">
+      <a href="#" class="btn-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98l-.09.06c-.22.14-2.2 1.28-2.18 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.35 2.77M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        Download on the App Store
+      </a>
+      <a href="support.html" class="btn-secondary">Get Support</a>
+    </div>
+
+    <!-- Mini mockup -->
+    <div class="mockup-wrap">
+      <div class="mockup-header">
+        <span class="label">Market Pulse · Latest Scan</span>
+        <span class="timestamp">Just now</span>
+      </div>
+      <div class="ticker-row">
+        <div class="ticker-left">
+          <div class="ticker-sym">NVDA</div>
+          <div class="ticker-reason">Short squeeze setup, heavy options flow, AI catalyst</div>
+        </div>
+        <div class="ticker-right">
+          <span class="score-pill score-bull">Score 9</span>
+          <span class="price-chg chg-pos">+3.4%</span>
+        </div>
+      </div>
+      <div class="ticker-row">
+        <div class="ticker-left">
+          <div class="ticker-sym">MU</div>
+          <div class="ticker-reason">Memory cycle recovery, institutional accumulation</div>
+        </div>
+        <div class="ticker-right">
+          <span class="score-pill score-bull">Score 7</span>
+          <span class="price-chg chg-pos">+1.8%</span>
+        </div>
+      </div>
+      <div class="ticker-row">
+        <div class="ticker-left">
+          <div class="ticker-sym">INTC</div>
+          <div class="ticker-reason">Bearish sentiment, earnings miss, revenue decline</div>
+        </div>
+        <div class="ticker-right">
+          <span class="score-pill score-bear">Score 3</span>
+          <span class="price-chg chg-neg">−2.1%</span>
+        </div>
+      </div>
+      <div class="ticker-row">
+        <div class="ticker-left">
+          <div class="ticker-sym">ASML</div>
+          <div class="ticker-reason">Google Trends spike, EUV demand outlook positive</div>
+        </div>
+        <div class="ticker-right">
+          <span class="score-pill score-bull">Score 8</span>
+          <span class="price-chg chg-pos">+2.2%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Sources -->
+  <section id="sources">
+    <div class="section-inner">
+      <div class="section-label">Data Sources</div>
+      <h2 class="section-title">Everything the internet knows about a stock, in one place.</h2>
+      <p class="section-sub">Most apps show you one signal. StockPulse combines six, weighted and scored by AI.</p>
+      <div class="sources-grid">
+        <div class="source-card">
+          <div class="source-icon">💬</div>
+          <div class="source-name">Reddit</div>
+          <div class="source-desc">Scans 9 of the most active investing communities — WallStreetBets, r/stocks, r/options, r/Daytrading, r/investing, r/pennystocks, and more — every 15 minutes.</div>
+        </div>
+        <div class="source-card">
+          <div class="source-icon">📊</div>
+          <div class="source-name">StockTwits</div>
+          <div class="source-desc">Pulls trending symbols and live message streams from the world's largest stock-specific social network, so you see what active traders are saying right now.</div>
+        </div>
+        <div class="source-card">
+          <div class="source-icon">🔍</div>
+          <div class="source-name">Google Trends</div>
+          <div class="source-desc">Detects retail search interest spikes. A score above 70 often precedes increased buying activity and is treated as a high-conviction signal.</div>
+        </div>
+        <div class="source-card">
+          <div class="source-icon">📰</div>
+          <div class="source-name">Financial News</div>
+          <div class="source-desc">Surfaces recent headlines per ticker from major financial news RSS feeds, so the AI model can factor in catalysts, earnings, and macro events.</div>
+        </div>
+        <div class="source-card">
+          <div class="source-icon">🏛️</div>
+          <div class="source-name">SEC EDGAR</div>
+          <div class="source-desc">Flags recent insider buying or selling activity from official SEC filings, providing institutional context that social sentiment alone can't capture.</div>
+        </div>
+        <div class="source-card">
+          <div class="source-icon">📈</div>
+          <div class="source-name">Yahoo Finance</div>
+          <div class="source-desc">Anchors every analysis with live price, 1-day and 5-day price change, volume vs. average, and market cap — so scores are grounded in actual market data.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- Features -->
+  <section id="features">
+    <div class="section-inner">
+      <div class="section-label">Features</div>
+      <h2 class="section-title">Everything you need. Nothing you don't.</h2>
+      <p class="section-sub">StockPulse is built for self-directed investors who want an edge in following retail sentiment — without the noise.</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-title">Scans Every 15 Minutes</div>
+          <div class="feature-desc">Fully automated. The moment the market moves on Reddit, you know about it.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <div class="feature-title">AI Investment Score</div>
+          <div class="feature-desc">Each ticker gets a score from 1–10 with a plain-English rationale and a bullish or bearish classification.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔔</div>
+          <div class="feature-title">Watchlist Alerts</div>
+          <div class="feature-desc">Add any ticker. Get an instant push notification the moment it starts trending across our data sources.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📡</div>
+          <div class="feature-title">Market Pulse Feed</div>
+          <div class="feature-desc">Ranked feed of trending tickers with scores, Reddit posts, StockTwits messages, news, and insider activity — all in one view.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🐻</div>
+          <div class="feature-title">Bearish Signals</div>
+          <div class="feature-desc">Not just bullish picks — StockPulse flags stocks with negative traction so you can avoid or short the right names.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <div class="feature-title">Privacy First</div>
+          <div class="feature-desc">No account required. No financial data collected. Watchlist stays on your device.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <h2>Start catching trends early.</h2>
+    <p>Free to download. No account needed.</p>
+    <a href="#" class="btn-primary" style="display:inline-flex;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98l-.09.06c-.22.14-2.2 1.28-2.18 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.35 2.77M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+      Download on the App Store
+    </a>
+  </div>
+
+  <!-- Disclaimer -->
+  <div class="disclaimer">
+    StockPulse AI is for informational purposes only and does not constitute financial, investment, legal, or tax advice. We are not registered investment advisors. Always do your own research and consult a licensed financial advisor before making investment decisions. Past performance is not indicative of future results.
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-brand">StockPulse AI</div>
+    <div class="footer-links">
+      <a href="support.html">Support</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Use</a>
+    </div>
+    <div class="footer-copy">&copy; 2024 Amey Mankar. All rights reserved.</div>
+  </footer>
+
+</body>
+</html>

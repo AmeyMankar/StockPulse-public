@@ -76,7 +76,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
         let bullishCount = analyses.filter { !$0.negativeTraction }.count
 
         let content = UNMutableNotificationContent()
-        content.title = "📡 Reddit Scan Complete"
+        content.title = "📡 StockPulse Scan Complete"
         content.sound = .default
 
         if let top = top {
@@ -119,7 +119,7 @@ final class NotificationService: NSObject, ObservableObject, UNUserNotificationC
 
             let content = UNMutableNotificationContent()
             content.title = "📌 $\(ticker) appeared in latest scan"
-            content.body = postTitle ?? "\(ticker) has new Reddit activity — check your Watchlist"
+            content.body = postTitle ?? "\(ticker) has new activity — check your Watchlist"
             content.sound = .default
             content.userInfo = ["type": "watchlist_alert", "ticker": ticker]
 

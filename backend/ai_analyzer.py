@@ -2,18 +2,19 @@
 ai_analyzer.py
 --------------
 Uses Anthropic Claude to generate deep investment analysis
-for each top ticker based on Reddit mention data + price info.
+for each top ticker based on StockTwits activity, other public sources, and price info.
 """
 
 import json
 import logging
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yfinance as yf
 from anthropic import Anthropic
 from dataclasses import dataclass
-from reddit_scraper import AggregatedTicker
+from stocktwits_scraper import AggregatedTicker
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,14 @@ def fetch_price_data(ticker: str) -> dict:
     """Fetch current price, change %, volume from Yahoo Finance (yfinance 1.x)."""
     try:
         t = yf.Ticker(ticker)
+        # Yahoo returns empty data (not an error) when it throttles us, so retry
+        # with backoff before treating a ticker as unrecognized.
         hist = t.history(period="5d")
+        for delay in (4, 10):
+            if not (hist.empty or len(hist) < 2):
+                break
+            time.sleep(delay)
+            hist = t.history(period="5d")
         fast_info = t.fast_info
 
         if hist.empty or len(hist) < 2:
@@ -109,12 +117,11 @@ def fetch_price_data(ticker: str) -> dict:
 
 ANALYSIS_SYSTEM_PROMPT = (
     "You are a seasoned quantitative equity analyst. "
-    "You receive structured data about stock tickers aggregated from 5 sources:\n"
-    "  1. Reddit — community discussion and social sentiment from investment subreddits\n"
-    "  2. StockTwits — financial social media trader sentiment and trending rank\n"
-    "  3. Google Trends — retail search interest (0-100 scale, US, last 7 days)\n"
-    "  4. News RSS — recent financial headlines from Yahoo Finance and major outlets\n"
-    "  5. SEC Form 4 — insider trading filings (executives/directors buying or selling)\n\n"
+    "You receive structured data about stock tickers aggregated from 4 sources:\n"
+    "  1. StockTwits — trader discussion, bullish/bearish tags, and trending rank\n"
+    "  2. Google Trends — retail search interest (0-100 scale, US, last 7 days)\n"
+    "  3. News RSS — recent financial headlines from Yahoo Finance and major outlets\n"
+    "  4. SEC Form 4 — insider trading filings (executives/directors buying or selling)\n\n"
     "Weighting guidance:\n"
     "- Google Trends score >70: strong retail-interest spike, often precedes price moves.\n"
     "- SEC Form 4 count >0: insiders are active — buying is a strong bullish signal, "
@@ -127,7 +134,7 @@ ANALYSIS_SYSTEM_PROMPT = (
 )
 
 ANALYSIS_USER_TEMPLATE = """\
-Analyze these {n} tickers. Data is sourced from Reddit, StockTwits, Google Trends, \
+Analyze these {n} tickers. Data is sourced from StockTwits, Google Trends, \
 News RSS, and SEC Form 4. For each ticker, produce a complete analysis object.
 
 TICKER DATA:
@@ -139,7 +146,7 @@ Return a JSON array of {n} objects. Each object must have EXACTLY these fields:
 price momentum, sentiment velocity, volume spike, Google Trends interest, \
 insider activity, and risk)
 - sentiment_score: integer 1-100 (50 = neutral; >70 strongly bullish; \
-<30 strongly bearish; weight all 5 sources)
+<30 strongly bearish; weight all sources)
 - sentiment_label: one of ["Strongly Bullish", "Bullish", "Neutral", "Bearish", \
 "Strongly Bearish"]
 - risk_level: one of ["Low", "Medium", "High", "Extreme"]
@@ -167,9 +174,6 @@ class AIAnalyzer:
         price: dict,
         supplemental: dict | None = None,
     ) -> str:
-        sub_str = ", ".join(f"r/{k}({v})" for k, v in sorted(
-            agg.subreddits.items(), key=lambda x: x[1], reverse=True
-        ))
         sentiment_direction = (
             "bullish" if agg.avg_sentiment > 0.05
             else "bearish" if agg.avg_sentiment < -0.05
@@ -179,14 +183,12 @@ class AIAnalyzer:
 
         lines = [
             f"TICKER: {agg.ticker}",
-            # Source 1: Reddit
-            f"  [Reddit] Mentions: {agg.total_mentions} "
-            f"(posts:{agg.post_mentions} comments:{agg.comment_mentions})",
-            f"  [Reddit] Subreddits: {sub_str}",
-            f"  [Reddit] VADER Sentiment: {agg.avg_sentiment:.3f} ({sentiment_direction})"
+            # Source 1: StockTwits
+            f"  [StockTwits] Recent messages analysed: {agg.total_mentions}",
+            f"  [StockTwits] Sentiment (trader tags, else VADER): {agg.avg_sentiment:.3f} ({sentiment_direction})"
             f" — bullish:{agg.bullish_count} bearish:{agg.bearish_count}"
             f" neutral:{agg.neutral_count}",
-            f"  [Reddit] Top Posts: {posts_str}",
+            f"  [StockTwits] Top messages: {posts_str}",
         ]
         if price:
             lines += [

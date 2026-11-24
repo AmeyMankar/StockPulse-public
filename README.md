@@ -1,6 +1,6 @@
 # StockPulse AI
 
-StockPulse AI is an iPhone app that shows which stocks retail investors are talking about right now. It reads public discussion from investing subreddits and other public sources, counts ticker mentions, measures sentiment, and shows a short AI-written summary per ticker.
+StockPulse AI is an iPhone app that shows which stocks retail investors are talking about right now. It reads public trader discussion and other public sources, measures sentiment, and shows a short AI-written summary per ticker.
 
 This repository contains the iOS app (SwiftUI) and the backend that powers it (Python / FastAPI).
 
@@ -10,8 +10,8 @@ This repository contains the iOS app (SwiftUI) and the backend that powers it (P
 
 ```
  public sources ──► scan worker ──► Claude summaries ──► backend API ──► iOS app
- (Reddit, StockTwits,    (every 15 min)                     (FastAPI)       (SwiftUI, push alerts)
-  news RSS, Google Trends,
+ (StockTwits, news RSS,    (every 15 min)                     (FastAPI)       (SwiftUI, push alerts)
+  Google Trends,
   SEC Form 4 filings)
 ```
 
@@ -20,18 +20,19 @@ This repository contains the iOS app (SwiftUI) and the backend that powers it (P
 3. The Claude API writes a short per-ticker summary from the collected data.
 4. The worker posts the result to the backend, which serves it to the app and sends push notifications for tickers on a user's watchlist.
 
-## Reddit usage
+## Data sources
 
-Reddit is one of five sources. It is used in a deliberately narrow way:
+StockPulse originally also read Reddit. Reddit has since closed public API access to new applications and directs all new apps to its Devvit platform, which can't feed an external backend and iPhone app, so Reddit is no longer a source.
 
-- **Read-only.** The app never posts, comments, votes, messages, or moderates, and it uses no user accounts or user data.
-- **Public content only,** from the hot listings of 9 subreddits: r/wallstreetbets, r/stocks, r/pennystocks, r/stockstobuytoday, r/stockmarket, r/investing, r/options, r/Daytrading, r/smallcapstocks.
-- **Small volume:** up to 10 posts per subreddit and up to 30 comments per post, once every 15 minutes, with a global limit of one request per second.
-- **Purpose:** counting ticker mentions and measuring sentiment. Reddit text is not republished in the app.
-- **Attribution:** for each ticker the app shows up to five post titles with their score and a link back to the original thread on Reddit.
-- **AI use:** aggregated results are sent to the Anthropic API to generate summaries. Reddit content is not used to train models.
-- **Retention:** only the latest scan result is kept.
-- **Status:** the current reader (`backend/reddit_scraper.py`) fetches public pages and is being migrated to Reddit's official Data API. Access has been requested, and this repository will be updated when it is in place.
+| Source | What it provides |
+|---|---|
+| StockTwits public API | Trending tickers, recent messages per ticker, traders' own Bullish/Bearish tags |
+| News RSS (Yahoo Finance) | Recent headlines per ticker |
+| Google Trends | Retail search interest (cached 6 h) |
+| SEC EDGAR Form 4 | Insider filings (cached 12 h) |
+| Yahoo Finance | Prices, volume, market cap |
+
+StockTwits use is read-only and small: one trending request plus up to 30 per-ticker streams every 15 minutes (about 124 requests an hour). For each ticker the app shows up to five messages with their like counts and a link back to the original on StockTwits. Aggregated results are sent to the Anthropic API to generate summaries and are not used to train models. Only the latest scan result is kept.
 
 ## Repository layout
 

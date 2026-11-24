@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from reddit_scraper import RedditScraper
+from stocktwits_scraper import StockTwitsScraper
 from ai_analyzer import AIAnalyzer, TickerAnalysis
 from push_notifications import APNsPusher
 
@@ -98,7 +98,7 @@ _default_interval = int(os.getenv("SCAN_INTERVAL_SECONDS", 900))
 SCAN_INTERVAL = _default_interval
 
 # ── Globals ───────────────────────────────────────────────────────────────────
-scraper: RedditScraper | None = None
+scraper: StockTwitsScraper | None = None
 analyzer: AIAnalyzer | None = None
 pusher: APNsPusher | None = None
 
@@ -245,7 +245,7 @@ def analysis_to_dict(a: TickerAnalysis) -> dict:
         "neutralCount": a.neutral_count,
         # topPosts kept as [String] for backward compat with older app builds
         "topPosts": [p.get("title", "") for p in a.top_posts] if a.top_posts else [],
-        # redditPosts carries full objects {title, url, score} for the new build
+        # redditPosts (legacy key name, kept for older app builds) carries full objects {title, url, score} for the new build
         "redditPosts": a.top_posts,
         "investmentScore": a.investment_score,
         "sentimentScore": a.sentiment_score,
@@ -283,14 +283,14 @@ async def run_scan(attempt: int = 0) -> None:
             age = (datetime.now(ingested_at.tzinfo) - ingested_at).total_seconds()
             if age < _mac_threshold:
                 logger.info(
-                    "Skipping Reddit-only scan — mac_worker data is %.0fm old (threshold %.0fm)",
+                    "Skipping server-side scan — mac_worker data is %.0fm old (threshold %.0fm)",
                     age / 60, _mac_threshold / 60,
                 )
                 return
         except Exception:
             pass
 
-    logger.info("=== Starting Reddit scan (attempt %d/%d) ===", attempt + 1, _MAX_ATTEMPTS)
+    logger.info("=== Starting scan (attempt %d/%d) ===", attempt + 1, _MAX_ATTEMPTS)
 
     try:
         loop = asyncio.get_event_loop()
@@ -446,11 +446,7 @@ async def lifespan(app: FastAPI):
     if last_scan["timestamp"]:
         logger.info(f"Restored scan cache from {last_scan['timestamp']}")
 
-    scraper = RedditScraper(
-        client_id=os.getenv("REDDIT_CLIENT_ID", ""),
-        client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
-        user_agent=os.getenv("REDDIT_USER_AGENT", "StockPulse/1.0"),
-    )
+    scraper = StockTwitsScraper()
     analyzer = AIAnalyzer(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     # APNs key: prefer APNS_KEY_CONTENT (base64-encoded .p8) for cloud deployments
@@ -469,7 +465,7 @@ async def lifespan(app: FastAPI):
         logger.warning("APNs key not found — push notifications disabled")
 
     asyncio.create_task(_run_scan_locked())
-    scheduler.add_job(_run_scan_locked, "interval", seconds=SCAN_INTERVAL, id="reddit_scan")
+    scheduler.add_job(_run_scan_locked, "interval", seconds=SCAN_INTERVAL, id="scan")
     scheduler.start()
     logger.info(f"Scheduler started — scanning every {SCAN_INTERVAL}s")
     if not _CLIENT_API_KEY:
@@ -486,7 +482,7 @@ async def lifespan(app: FastAPI):
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="StockPulse API",
-    description="Reddit Stock Sentiment Tracker with AI Analysis",
+    description="Stock Trend Tracker with AI Analysis",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -533,7 +529,7 @@ async def health():
     Returns scheduler state, last scan info, device count, and error-reporting status.
     Safe to call unauthenticated — contains no sensitive data.
     """
-    job = scheduler.get_job("reddit_scan")
+    job = scheduler.get_job("scan")
     return {
         "status": "ok",
         "version": "1.0.0",
@@ -611,7 +607,7 @@ async def get_ticker_detail(symbol: str):
 
 @app.get("/scan/schedule")
 async def get_schedule():
-    job = scheduler.get_job("reddit_scan")
+    job = scheduler.get_job("scan")
     next_run = str(job.next_run_time) if job else "unknown"
     return {
         "interval_seconds": SCAN_INTERVAL,
@@ -633,7 +629,7 @@ async def update_scan_interval(payload: UpdateInterval):
             detail=f"Interval must be one of {sorted(ALLOWED_INTERVALS)} seconds"
         )
     SCAN_INTERVAL = payload.seconds
-    scheduler.reschedule_job("reddit_scan", trigger="interval", seconds=SCAN_INTERVAL)
+    scheduler.reschedule_job("scan", trigger="interval", seconds=SCAN_INTERVAL)
     _save_settings({"scan_interval": SCAN_INTERVAL})
     logger.info(f"Scan interval updated to {SCAN_INTERVAL}s")
     return {"status": "updated", "interval_seconds": SCAN_INTERVAL}

@@ -4,15 +4,14 @@ scan_worker.py
 Standalone scraper worker. Runs the full StockPulse pipeline:
 
   Fast sources  (every run — refresh matters at 15-min frequency):
-    1. Reddit       — community sentiment from 9 investment subreddits
-    2. StockTwits   — trending symbol ranks + message streams
-    3. News RSS     — recent headlines via Yahoo Finance per-ticker RSS
+    1. StockTwits   — trending tickers, message streams, trader sentiment tags
+    2. News RSS     — recent headlines via Yahoo Finance per-ticker RSS
 
   Slow sources  (cached — data doesn't change meaningfully in <hours):
-    4. Google Trends — retail search interest spikes (0-100) — 6h cache
-    5. SEC Form 4    — insider trading filings (last 30 days)  — 12h cache
+    3. Google Trends — retail search interest spikes (0-100) — 6h cache
+    4. SEC Form 4    — insider trading filings (last 30 days)  — 12h cache
 
-Claude AI synthesises all 5 sources into investment analysis, then results
+Claude AI synthesises all sources into investment analysis, then results
 are POSTed to the Railway backend via /scan/ingest.
 
 Cron (every 15 minutes):
@@ -51,9 +50,9 @@ RAILWAY_URL = os.getenv("RAILWAY_URL", "").rstrip("/")
 INGEST_API_KEY = os.getenv("INGEST_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-TOP_N        = 40   # tickers to scrape from Reddit
+TOP_N        = 30   # tickers to read from StockTwits
 ANALYZE_N    = 25   # top N sent to Claude
-MIN_MENTIONS = 2    # minimum Reddit mentions to qualify
+MIN_MENTIONS = 2    # minimum StockTwits messages to qualify
 
 # Slow-source cache TTLs
 _TRENDS_TTL  = 6  * 3600   # Google Trends  — 6 hours
@@ -90,55 +89,6 @@ def _cache_fresh(cache: dict, key: str, ttl: int) -> tuple[bool, float]:
         return age < ttl, age
     except Exception:
         return False, -1
-
-
-# ── StockTwits ────────────────────────────────────────────────────────────────
-def fetch_stocktwits_trending() -> dict[str, int]:
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.get("https://api.stocktwits.com/api/2/trending/symbols.json")
-            resp.raise_for_status()
-            symbols = resp.json().get("symbols", [])
-            return {s["symbol"]: i + 1 for i, s in enumerate(symbols)}
-    except Exception as e:
-        logger.warning("StockTwits trending fetch failed: %s", e)
-        return {}
-
-
-def fetch_stocktwits_streams(tickers: list[str]) -> dict[str, list[dict]]:
-    streams: dict[str, list[dict]] = {}
-    with httpx.Client(timeout=10.0) as client:
-        for ticker in tickers:
-            try:
-                resp = client.get(
-                    f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
-                )
-                if resp.status_code == 429:
-                    logger.warning("StockTwits rate limited — stopping stream fetches")
-                    break
-                if resp.status_code != 200:
-                    streams[ticker] = []
-                    continue
-                messages = resp.json().get("messages", [])
-                streams[ticker] = [
-                    {
-                        "stId": m["id"],
-                        "body": m["body"],
-                        "createdAt": m["created_at"],
-                        "username": m["user"]["username"],
-                        "likes": m.get("likes", {}).get("total", 0),
-                        "sentiment": (
-                            (m.get("entities") or {})
-                            .get("sentiment") or {}
-                        ).get("basic"),
-                    }
-                    for m in messages[:5]
-                ]
-            except Exception as e:
-                logger.warning("StockTwits stream failed for %s: %s", ticker, e)
-                streams[ticker] = []
-    logger.info("StockTwits streams: fetched for %d tickers", len(streams))
-    return streams
 
 
 # ── Serialiser ────────────────────────────────────────────────────────────────
@@ -188,16 +138,16 @@ def validate_config() -> None:
 def run() -> None:
     validate_config()
 
-    from reddit_scraper import RedditScraper
+    from stocktwits_scraper import StockTwitsScraper
     from ai_analyzer import AIAnalyzer
 
     logger.info("=== StockPulse scan worker starting ===")
 
     # ── Fast sources ──────────────────────────────────────────────────────────
 
-    # 1. Reddit
-    scraper = RedditScraper()
-    logger.info("Scraping Reddit...")
+    # 1. StockTwits (trending tickers + message streams + sentiment)
+    scraper = StockTwitsScraper()
+    logger.info("Reading StockTwits...")
     top_tickers = scraper.get_top_tickers(n=TOP_N, min_mentions=MIN_MENTIONS)
     logger.info("Scraped %d qualifying tickers", len(top_tickers))
 
@@ -207,11 +157,9 @@ def run() -> None:
 
     ticker_symbols = [t.ticker for t in top_tickers[:ANALYZE_N]]
 
-    # 2. StockTwits
-    stocktwits_ranks = fetch_stocktwits_trending()
-    logger.info("StockTwits trending: %d symbols", len(stocktwits_ranks))
+    stocktwits_ranks = scraper.trending_ranks
 
-    # 3. News RSS
+    # 2. News RSS
     from news_rss_scraper import fetch_news_for_tickers
     news_items = fetch_news_for_tickers(ticker_symbols)
 
@@ -220,7 +168,7 @@ def run() -> None:
     cache = _load_cache()
     cache_dirty = False
 
-    # 4. Google Trends — refresh every 6 hours
+    # 3. Google Trends — refresh every 6 hours
     fresh, age = _cache_fresh(cache, "google_trends", _TRENDS_TTL)
     if fresh:
         trends_scores = cache["google_trends"]["data"]
@@ -232,7 +180,7 @@ def run() -> None:
         cache["google_trends"] = {"cached_at": now_iso, "data": trends_scores}
         cache_dirty = True
 
-    # 5. SEC EDGAR — refresh every 12 hours
+    # 4. SEC EDGAR — refresh every 12 hours
     fresh, age = _cache_fresh(cache, "sec_edgar", _SEC_TTL)
     if fresh:
         insider_data = cache["sec_edgar"]["data"]
@@ -268,9 +216,8 @@ def run() -> None:
         logger.warning("AI analysis returned 0 results — aborting")
         return
 
-    # StockTwits streams for analyzed tickers only
-    analyzed_symbols = [a.ticker for a in analyses]
-    stocktwits_streams = fetch_stocktwits_streams(analyzed_symbols)
+    # Message streams were already fetched during discovery — reuse them
+    stocktwits_streams = scraper.streams
 
     # ── Build and POST payload ────────────────────────────────────────────────
     payload = {

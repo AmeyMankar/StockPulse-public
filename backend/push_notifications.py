@@ -152,7 +152,7 @@ class APNsPusher:
         badge: int | None = None,
     ) -> str:
         """
-        Send the Reddit scan summary notification.
+        Send the scan summary notification.
         Returns "ok", "expired", or "error" (see send() docstring).
         """
         if not analyses:
@@ -162,7 +162,7 @@ class APNsPusher:
         bearish = [a for a in analyses if a.negative_traction]
         bullish = [a for a in analyses if not a.negative_traction]
 
-        title = f"📡 Reddit Scan — {len(analyses)} Tickers"
+        title = f"📡 StockPulse Scan — {len(analyses)} Tickers"
 
         body_parts = [f"🚀 #{1} {top.ticker} (Score {top.investment_score})"]
         if len(bullish) > 1:
@@ -198,10 +198,10 @@ class APNsPusher:
         investment_score: int | None = None,
     ) -> str:
         """Send a targeted alert when a watched ticker enters the trending list."""
-        title = f"🔥 ${ticker} is now trending on Reddit"
+        title = f"🔥 ${ticker} is now trending on StockPulse"
         body = (
             post_title
-            or f"${ticker} has new Reddit activity — check your Watchlist"
+            or f"${ticker} has new activity — check your Watchlist"
         )
         data: dict = {"type": "watchlist_alert", "ticker": ticker}
         if investment_score is not None:
@@ -291,7 +291,7 @@ class APNsPusher:
         bearish = [a for a in analyses if a.negative_traction]
         bullish = [a for a in analyses if not a.negative_traction]
 
-        title = f"📡 Reddit Scan — {len(analyses)} Tickers"
+        title = f"📡 StockPulse Scan — {len(analyses)} Tickers"
         body_parts = [f"🚀 #{1} {top.ticker} (Score {top.investment_score})"] if top else []
         if len(bullish) > 1:
             body_parts.append("Also trending: " + ", ".join(f"${a.ticker}" for a in bullish[1:4]))
@@ -330,8 +330,8 @@ class APNsPusher:
         investment_score: int | None = None,
     ) -> tuple[str, str]:
         """Returns (device_token, result) so callers can identify expired tokens."""
-        title = f"🔥 ${ticker} is now trending on Reddit"
-        body = post_title or f"${ticker} has new Reddit activity — check your Watchlist"
+        title = f"🔥 ${ticker} is now trending on StockPulse"
+        body = post_title or f"${ticker} has new activity — check your Watchlist"
         data: dict = {"type": "watchlist_alert", "ticker": ticker}
         if investment_score is not None:
             data["investment_score"] = investment_score

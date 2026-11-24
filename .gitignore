@@ -3,12 +3,14 @@ backend/venv/
 backend/__pycache__/
 backend/*.pyc
 backend/*.pyo
-backend/.env            # ← NEVER commit secrets
-backend/last_scan.json   # runtime cache
-backend/devices.json     # runtime data
-backend/.slow_cache.json # slow-source cache (Google Trends, SEC EDGAR)
-backend/settings.json   # runtime data
-backend/watchlists.json # device tokens — never commit
+# NEVER commit secrets
+backend/.env
+# runtime data and caches (device tokens, scan results, Google Trends/SEC cache)
+backend/last_scan.json
+backend/devices.json
+backend/.slow_cache.json
+backend/settings.json
+backend/watchlists.json
 backend/nohup.out
 *.log
 

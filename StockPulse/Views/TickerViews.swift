@@ -175,7 +175,6 @@ struct TickerCardView: View {
                 insiderTradesSection
                 redditPostsSection
                 catalystsSection
-                subredditBreakdownSection
             }
             SentimentBarView(
                 bullish: ticker.bullishCount,
@@ -467,12 +466,12 @@ struct TickerCardView: View {
         }
     }
 
-    // ── Reddit posts ─────────────────────────────────
+    // ── StockTwits posts (data key is still "redditPosts" for backward compatibility) ──────────────────────────────────
     @ViewBuilder
     private var redditPostsSection: some View {
         if !ticker.safeRedditPosts.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("REDDIT POSTS")
+                Text("TOP STOCKTWITS POSTS")
                     .font(.system(size: 9, weight: .black, design: .monospaced))
                     .foregroundColor(.spTextDim)
                     .tracking(1.5)
@@ -490,7 +489,7 @@ struct TickerCardView: View {
         if let url = URL(string: post.url) {
             Link(destination: url) {
                 HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "arrow.up.circle")
+                    Image(systemName: "heart")
                         .font(.system(size: 10))
                         .foregroundColor(.spAccentOrange)
                         .padding(.top, 1)
@@ -500,7 +499,7 @@ struct TickerCardView: View {
                             .foregroundColor(.spTextSecondary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                        Text("\(post.score) upvotes")
+                        Text("\(post.score) likes")
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.spTextDim)
                     }
@@ -579,7 +578,7 @@ struct SentimentBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("REDDIT SENTIMENT BREAKDOWN")
+            Text("TRADER SENTIMENT BREAKDOWN")
                 .font(.system(size: 9, weight: .black, design: .monospaced))
                 .foregroundColor(.spTextDim)
                 .tracking(1.5)
@@ -652,12 +651,6 @@ struct SourcesRowView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) {
-                    SourceChip(
-                        label: "Reddit",
-                        icon: "bubble.left.and.bubble.right",
-                        color: Color(hex: "FF4500"),
-                        active: ticker.totalMentions > 0
-                    )
                     SourceChip(
                         label: "StockTwits",
                         icon: "chart.line.uptrend.xyaxis",
